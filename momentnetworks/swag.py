@@ -1,4 +1,6 @@
-from tensorflow.keras.layers import Dense, Dropout, LeakyReLU, Input
+import tensorflow as tf
+import keras
+from tensorflow.keras.layers import Dense, Dropout, LeakyReLU, Input, Flatten
 
 
 class SimplerLeaky(tf.keras.Model):
@@ -8,11 +10,8 @@ class SimplerLeaky(tf.keras.Model):
         # Now we initalize the needed layers - order does not matter.
         # -----------------------------------------------------------
         # Flatten Layer
-        self.flatten = keras.layers.Flatten()
+        self.flatten = Flatten()
         # First Dense Layer
-        self.dense1 = keras.layers.Dense(128, activation = tf.nn.relu)
-        # Output Layer
-        self.dense2 = keras.layers.Dense(10)
 
         self.dense1 = Dense(128)
         self.act1 = LeakyReLU(alpha=0.1)
