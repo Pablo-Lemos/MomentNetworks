@@ -42,13 +42,15 @@ class SwaModel(tf.keras.Model):
         self.n_models += 1
 
     def load_weights(self, arr):
-        currWeights = self.weights
+        currWeights = self.get_weights()
         currIndex = 0
+        newWeights = []
         for i, layer in enumerate(currWeights):
             n = np.prod(layer.shape)
             w = arr[currIndex:currIndex+n]
             currIndex+=n
-            self.weights[i] = tf.reshape(w, layer.shape)
+            newWeights.append(tf.reshape(w, layer.shape))
+        self.set_weights(newWeights)
 
     def sample_weights(self, scale=0.5):
         """Sample weights using SWAG:
@@ -75,6 +77,11 @@ class SwaModel(tf.keras.Model):
 
         self.load_weights(w)
         return w
+
+    def forward_swag(self, x, scale=0.5):
+        # Sample using SWAG using recorded model moments
+        self.sample_weights(scale=scale)
+        return self.call(x)
 
 
 class SimplerLeaky(tf.keras.Model):
@@ -103,7 +110,7 @@ class SimplerLeaky(tf.keras.Model):
 
 
 class SwaLeaky(SwaModel):
-    def __init__(self):
+    def __init__(self, nOut):
         # Initialize the necessary components of tf.keras.Model
         super(SwaLeaky, self).__init__()
         # Now we initalize the needed layers - order does not matter.
@@ -116,7 +123,7 @@ class SwaLeaky(SwaModel):
         self.act1 = LeakyReLU(alpha=0.1)
         self.dense2 = Dense(128)
         self.act2 = LeakyReLU(alpha=0.1)
-        self.dense3 = Dense(128)
+        self.dense3 = Dense(nOut)
 
     def call(self, inputs):
         x = self.flatten(inputs)
@@ -134,12 +141,15 @@ class SwaCallback(keras.callbacks.Callback):
 
 
 if __name__ == "__main__":
-    model = SwaLeaky()
+    model = SwaLeaky(1)
 
     model.compile(loss='mse')
     xs = tf.random.uniform((1000, 2))
     ys = tf.reduce_sum(xs, axis=1, keepdims=True)
     model.fit(xs, ys, epochs=50, callbacks=[SwaCallback()])
+    yp = model.predict(xs)
     model.aggregate_model()
 
-    print(model.sample_weights())
+    print(model.summary())
+    print(model.forward_swag(xs[:2]))
+    print(model.forward_swag(xs[:2]))
