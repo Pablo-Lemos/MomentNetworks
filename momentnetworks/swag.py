@@ -1,3 +1,4 @@
+import keras.callbacks
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.layers import Dense, Dropout, LeakyReLU, Input, Flatten
@@ -12,7 +13,7 @@ class SwaModel(tf.keras.Model):
         self.n_models = 0
         self.K = 20
 
-    def flatten(self):
+    def flatten_weights(self):
         flat = tf.zeros(0)
         for layer in self.weights:
             flat = tf.concat([flat, tf.reshape(layer, -1)], axis=0)
@@ -20,7 +21,7 @@ class SwaModel(tf.keras.Model):
 
     def aggregate_model(self):
         # """Aggregate parameters for SWA/SWAG"""
-        cur_w = self.flatten()
+        cur_w = self.flatten_weights()
         cur_w2 = cur_w ** 2
 
         if self.w_avg is None:
@@ -31,7 +32,7 @@ class SwaModel(tf.keras.Model):
             self.w2_avg = (self.w2_avg * self.n_models + cur_w2) / (self.n_models + 1)
 
         if self.pre_D is None:
-            self.pre_D = cur_w.clone()[:, None]
+            self.pre_D = tf.identity(cur_w)[:, None]
         else:
             # Record weights, measure discrepancy with average later
             self.pre_D = tf.concat((self.pre_D, cur_w[:, None]), axis=1)
@@ -66,9 +67,10 @@ class SwaModel(tf.keras.Model):
         z_1 = tf.random.normal((1, d))
         z_2 = tf.random.normal((K, 1))
 
+        assert D.shape[1] == K, 'Not enough models aggregated'
         w = avg_w[None] + scale * (1.0 / np.sqrt(2.0)) * z_1 * tf.abs(
             avg_w2 - avg_w ** 2) ** 0.5
-        w += scale * (D @ z_2).T / np.sqrt(2 * (K - 1))
+        w += scale * tf.transpose(D @ z_2) / np.sqrt(2 * (K - 1))
         w = w[0]
 
         self.load_weights(w)
@@ -125,7 +127,19 @@ class SwaLeaky(SwaModel):
         return self.dense3(x) # Return results of Output Layer
 
 
+class SwaCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        self.model.aggregate_model()
+
+
+
 if __name__ == "__main__":
     model = SwaLeaky()
-    model.compile()
-    print(model)
+
+    model.compile(loss='mse')
+    xs = tf.random.uniform((1000, 2))
+    ys = tf.reduce_sum(xs, axis=1, keepdims=True)
+    model.fit(xs, ys, epochs=50, callbacks=[SwaCallback()])
+    model.aggregate_model()
+
+    print(model.sample_weights())
